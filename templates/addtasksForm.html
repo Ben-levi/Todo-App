@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %} Add Task {% endblock %}
+
+{% block content %}
+    
+    <form class="my-form" action="/createtask" method="post" enctype="multipart/form-data">
+        <h2 id="error">{{message}}</h2>   
+
+        <h1>Add Tasks Form</h1>
+        <!-- name -->
+        <div>
+            <label id = "fullNameLable" for="fullname">Enter your Task:</label>
+            <input type="text" name="fullname" id="fullname" required>
+        </div>
+        <!-- priorty -->
+        <div>
+            <label for="priorty">Enter the priorty:</label>
+            <input type="text" name="priorty" id="priorty">
+        </div>
+        <!-- Status -->
+        <div>
+            <label for="Status">Enter Status:</label>
+            <input type="text" name="Status" id="Status" required>
+        </div>
+        <!-- Gender -->
+         <div>
+            <label for="person">Select person:</label>
+            <select name="person" id="person">
+                <option value="Dad">Dad</option>    
+                <option value="Mom">Mom</option>
+                <option value="Sister">Sister</option>
+                <option value="Brother">Brother</option>       
+            </select>
+         </div>
+        <!-- upload photo  -->
+        <div>
+            <label for="photo">Upload your photo:</label>
+            <input type="file" name="photo" id="photo" accept="image/*">
+        </div>
+
+         <!-- agree Checkbox -->
+         <div>
+            <label for="agree">I agree to do my task:</label>
+            <input type="checkbox" name="agree" id="agree" required>
+        </div>
+        <!-- submit-->
+         <button type="submit">Add to Tasks</button>
+    </form>
+
+    <script src="/static/js/script.js"></script>
+
+{% endblock %}

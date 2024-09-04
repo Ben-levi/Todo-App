@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %} Edit task {% endblock %}
+
+{% block content %}
+
+<form class="my-form" action="{{ url_for('saveUpdatedtask', number=task['number']) }}" method="POST" enctype="multipart/form-data">    <h2 id="error">{{message}}</h2> 
+    <h1>Edit tasks Form</h1>
+    
+    <!-- name -->
+    <div>
+        <label td="fullNameLabel" for="fullname">Update the Name:</label>
+        <input type="text" name="fullname" id="fullname" value="{{task.fullname}}" required>
+    </div>
+
+    <!-- email -->
+    <div>
+        <label for="priorty">Update Your priorty:</label>
+        <input type="text" name="priorty" id="priorty" value="{{task.priorty}}"required>
+    </div>
+
+    <!-- phone -->
+    <div>
+        <label for="Status">Update Your Status:</label>
+        <input type="text" name="Status" id="Status" value="{{task.Status}}" required>
+    </div>
+
+    <!-- Gender -->
+    <div>
+        <label for="person">Select your person:</label>
+        <select name="person" id="person">
+            <option value="Dad" {% if task.person == 'Dad' %}selected{% endif %}>Dad</option>    
+            <option value="Mom" {% if task.person == 'Mom' %}selected{% endif %}>Mom</option>
+            <option value="Sister" {% if task.person == 'Sister' %}selected{% endif %}>Sister</option>
+            <option value="Brother" {% if task.person == 'Brother' %}selected{% endif %}>Brother</option>       
+        </select>
+    </div>
+
+    <!-- submit -->
+    <button type="submit">Save Changes</button>
+</form>
+
+{% endblock %}

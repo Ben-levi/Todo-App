@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %} tasks {% endblock %}
+
+
+{% block content %}   
+    <h1 class="h1-center">Tasks Page</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Number</th>
+                <th>fullname</th>
+                <th>priorty</th>
+                <th>Status</th>
+                <th>Photo</th>
+                <th>Actions</th>
+            </tr>
+        </thead>           
+        <tbody>
+        <!-- for element in list -->
+         {% for task in tasks %}
+            <tr>
+                <td>{{ task.number if task.number else task._id}}</td>
+                <td>{{ task.fullname }}</td>
+                <td>{{ task.priorty }}</td>
+                <td>{{ task.Status}}</td>
+                <td>
+                    <img src="/static/images/{{task.photo}}" height="100px">
+                </td>
+                <td>
+                    <a href="/edittask/{{task.number if task.number else task._id}}">
+                        <button>Edit</button>
+                    </a>
+                      
+                    <a href="/deletetask/{{task.number if task.number else task._id}}">
+                        <button>Delete</button>
+                    </a>
+                    
+                </td>
+            </tr>
+        <!-- end for -->
+        {% endfor %}
+    
+
+{% endblock %}

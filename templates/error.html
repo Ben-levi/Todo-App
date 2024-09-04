@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8d7da;
+            color: #721c24;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background-color: #f5c6cb;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            font-size: 2em;
+        }
+        p {
+            font-size: 1.2em;
+        }
+        .error-code {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Oops! Something went wrong.</h1>
+        <p class="error-code">Error Code: {{ error_code }}</p>
+        <p>{{ message }}</p>
+        <p>Here are some common error codes:</p>
+        <ul>
+            <li>400 - Bad Request</li>
+            <li>401 - Unauthorized</li>
+            <li>403 - Forbidden</li>
+            <li>404 - Not Found</li>
+            <li>500 - Internal Server Error</li>
+        </ul>
+    </div>
+</body>
+</html>

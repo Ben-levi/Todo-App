@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %} Default  {% endblock %} </title>
+    <link rel="stylesheet" href="/static/styles/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-left">
+            <a href="/">Home</a>
+            <!-- search box with search label -->
+            <form action="/search" method="post">
+                <input type="text" placeholder="Name..." id="search" name="search_name">
+                <button type="submit">Search</button>
+            </form>
+        </div>
+        <div class="navbar-right">
+            <a href="/addtask">New Task</a>
+            <a href="/viewtasks">View Tasks</a>
+        </div>
+    </nav>
+    
+    {% block content %} <h3> Content </h3> {% endblock %}
+</body>
+</html>
