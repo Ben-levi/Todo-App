@@ -24,7 +24,7 @@ MySQL
 VS Code
 Installation
 Clone the repository:
-git clone https://github.com/yourusername/family-todo-app.git
+git clone https://github.com/Ben-levi/Todo-App?tab=readme-ov-file
 cd family-todo-app
 
 Set up a virtual environment:
