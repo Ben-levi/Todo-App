@@ -1,0 +1,31 @@
+prometheus:
+  server:
+    persistentVolume:
+      enabled: false
+  alertmanager:
+    persistentVolume:
+      enabled: false
+
+prometheus-mysql-exporter:
+  serviceMonitor:
+    enabled: true
+    namespace: default
+  mysql:
+    db: "contacts"
+    user: "root"
+    pass: "password"
+    host: "mysql"
+    port: "3306"
+
+mysql:
+  image: mysql:5.7
+  rootPassword: password
+  database: contacts
+
+flask:
+  image: your-flask-image:latest
+  replicas: 1
+  mysqlHost: mysql
+  mysqlUser: root
+  mysqlPassword: password
+  mysqlDatabase: contacts

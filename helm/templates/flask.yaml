@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-flask
+spec:
+  replicas: {{ .Values.flask.replicas }}
+  selector:
+    matchLabels:
+      app: flask-contacts
+  template:
+    metadata:
+      labels:
+        app: flask-contacts
+    spec:
+      containers:
+      - name: flask-contacts
+        image: {{ .Values.flask.image }}
+        env:
+        - name: MYSQL_HOST
+          value: {{ .Values.flask.mysqlHost }}
+        - name: MYSQL_USER
+          value: {{ .Values.flask.mysqlUser }}
+        - name: MYSQL_PASSWORD
+          value: {{ .Values.flask.mysqlPassword }}
+        - name: MYSQL_DB
+          value: {{ .Values.flask.mysqlDatabase }}

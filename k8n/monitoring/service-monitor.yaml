@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flask-contacts
+spec:
+  selector:
+    matchLabels:
+      app: flask-contacts
+  endpoints:
+  - port: metrics

@@ -1,0 +1,9 @@
+serviceMonitor:
+  enabled: true
+  namespace: default
+mysql:
+  db: "contacts"
+  user: "root"
+  pass: "password"
+  host: "mysql"
+  port: "3306"

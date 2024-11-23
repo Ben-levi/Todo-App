@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  labels:
+    app: flask-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: flask-app
+  template: #pod defintion
+    metadata:
+      labels:
+        app: flask-app
+    spec: # container specs
+      containers:
+        - name: flask-app
+          image: benl89/todo_app:latest
+
+          ports:
+            - containerPort: 5052
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+          - name: DB_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: mysql-configmap
+                key: db_url
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5052
+          volumeMounts:
+          - name: flask-app-images
+            mountPath: /app/static/images
+      volumes:
+        - name: flask-app-images
+          persistentVolumeClaim:
+            claimName: flask-app-images
+            
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+ name: flask-app-service
+spec:
+ selector:
+   app: flask-app
+ type: LoadBalancer # external service which can be accessed from outside the cluster
+ ports:
+   - protocol: TCP
+     port: 5052
+     targetPort: 5052   
