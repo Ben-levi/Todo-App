@@ -1,93 +1,163 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: helm-kubectl
+                    image: dtzar/helm-kubectl
+                    command:
+                    - cat
+                    tty: true
+                  - name: docker
+                    image: docker:latest
+                    command:
+                    - cat
+                    tty: true
+                    volumeMounts:
+                    - mountPath: /var/run/docker.sock
+                      name: docker-sock
+                  volumes:
+                  - name: docker-sock
+                    hostPath:
+                      path: /var/run/docker.sock
+            '''
+        }
+    }
     
     environment {
-        DOCKER_IMAGE = 'benl89/todo_app'
-        DOCKER_TAG = 'latest'
+        DOCKER_REGISTRY = "your-registry"  // Replace with your registry
+        DOCKER_IMAGE = "shashkist/flask-contacts-app"
+        DOCKER_TAG = "1.4"
+        HELM_RELEASE_NAME = "todo-app"
     }
-
-    parameters {
-        string(
-            name: 'DB_HOST',
-            defaultValue: 'mysql',
-            description: 'Enter the database host address'
-        )
-    }
-
+    
     stages {
-        stage('Verify Files') {
+        stage('Build and Push Docker Image') {
             steps {
-                // Debug step to verify files are present
-                bat '''
-                    echo "Workspace contents:"
-                    dir
-                    echo "Requirements.txt contents:"
-                    type requirements.txt
+                container('docker') {
+                    sh '''
+                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    '''
+                }
+            }
+        }
+        
+        stage('Add Helm Repositories') {
+            steps {
+                container('helm-kubectl') {
+                    sh '''
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo add grafana https://grafana.github.io/helm-charts
+                        helm repo update
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy MySQL') {
+            steps {
+                container('helm-kubectl') {
+                    sh '''
+                        # Create MySQL ConfigMap
+                        kubectl apply -f kubernetes/mysql/configmap.yaml
+                        
+                        # Create MySQL Secrets
+                        kubectl apply -f kubernetes/mysql/secrets.yaml
+                        
+                        # Create MySQL PVC
+                        kubectl apply -f kubernetes/mysql/pvc.yaml
+                        
+                        # Deploy MySQL
+                        kubectl apply -f kubernetes/mysql/deployment.yaml
+                    '''
+                }
+            }
+        }
+        
+        stage('Install Monitoring Stack') {
+            steps {
+                container('helm-kubectl') {
+                    sh '''
+                        # Install Prometheus
+                        helm install prometheus prometheus-community/prometheus \
+                            -f kubernetes/monitoring/prometheus-values.yaml
+                            
+                        # Install MySQL Exporter
+                        helm install mysql-exporter prometheus-community/prometheus-mysql-exporter \
+                            -f kubernetes/monitoring/mysql-exporter-values.yaml
+                            
+                        # Install Grafana
+                        helm install grafana grafana/grafana \
+                            -f kubernetes/monitoring/grafana-values.yaml
+                            
+                        # Apply ServiceMonitor
+                        kubectl apply -f kubernetes/monitoring/service-monitor.yaml
+                    '''
+                }
+            }
+        }
+        
+        stage('Deploy Flask Application') {
+            steps {
+                container('helm-kubectl') {
+                    sh '''
+                        # Create Flask ConfigMap
+                        kubectl apply -f kubernetes/flask/configmap.yaml
+                        
+                        # Create Flask Secrets
+                        kubectl apply -f kubernetes/flask/secrets.yaml
+                        
+                        # Create Flask PVC
+                        kubectl apply -f kubernetes/flask/pvc.yaml
+                        
+                        # Deploy Flask App
+                        kubectl apply -f kubernetes/flask/deployment.yaml
+                        
+                        # Create Flask Service
+                        kubectl apply -f kubernetes/flask/service.yaml
+                    '''
+                }
+            }
+        }
+        
+        stage('Verify Deployments') {
+            steps {
+                container('helm-kubectl') {
+                    sh '''
+                        # Wait for MySQL to be ready
+                        kubectl rollout status deployment/mysql
+                        
+                        # Wait for Flask app to be ready
+                        kubectl rollout status deployment/flask-app
+                        
+                        # Check Prometheus targets
+                        kubectl get servicemonitors
+                        
+                        # Get all running pods
+                        kubectl get pods
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        failure {
+            echo 'Deployment failed! Starting cleanup...'
+            container('helm-kubectl') {
+                sh '''
+                    helm uninstall mysql-exporter || true
+                    helm uninstall prometheus || true
+                    helm uninstall grafana || true
+                    kubectl delete -f kubernetes/flask/ || true
+                    kubectl delete -f kubernetes/mysql/ || true
+                    kubectl delete -f kubernetes/monitoring/ || true
                 '''
             }
-        }
-
-        stage('Display DB Host') {
-            steps {
-                script {
-                    echo "Database host: ${params.DB_HOST}"
-                }
-            }
-        }
-
-        stage('Debug') {
-            steps {
-                bat 'echo %CD%'
-                bat 'dir'
-                bat 'git status'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    // Build the Docker image with DB_HOST as a build argument
-                    bat """
-                        echo "Building Docker image..."
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} --build-arg DB_HOST=${params.DB_HOST} .
-                    """
-                }
-            }
-        }
-
-        stage('Login to DockerHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USERNAME')]) {
-                    bat 'docker login -u %DOCKERHUB_USERNAME% -p %DOCKERHUB_PASSWORD%'
-                }
-            }
-        }
-
-        stage('Push to DockerHub') {
-            steps {
-                bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            }
-        }
-
-        stage('Deploy with Docker Compose') {
-            steps {
-                script {
-                    // Pass DB_HOST as an environment variable to Docker Compose
-                    bat """
-                        echo "Deploying with Docker Compose..."
-                        set DB_HOST=${params.DB_HOST}
-                        docker-compose up -d
-                    """
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            bat 'docker logout'
-            // Clean up images
-            bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
         }
     }
 }
