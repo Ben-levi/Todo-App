@@ -1,6 +1,7 @@
 # bolilerplate for flask app
 from flask import Flask, render_template, request, redirect , url_for
 from dotenv import load_dotenv
+from prometheus_flask_exporter import PrometheusMetrics
 import logging
 logging.basicConfig(level=logging.DEBUG)
 import os
@@ -16,8 +17,7 @@ from data_sql import (get_tasks, create_task, delete_task,
 
 
 app = Flask(__name__)
-
-
+metrics = PrometheusMetrics(app)
 
 ##################################################################
 ########## ROUTES ################################################
@@ -105,4 +105,4 @@ def saveUpdatedtask(number):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(port=5000)
