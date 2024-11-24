@@ -1,82 +1,104 @@
 pipeline {
-    agent any
-    
-    environment {
-        DOCKER_IMAGE = 'benl89/todo_app'
-        DOCKER_TAG = 'latest'
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+    labels:
+        app: jenkins-agent
+spec:
+    containers:
+    - name: helm-kubectl
+      image: dtzar/helm-kubectl:latest
+      command:
+      - cat
+      tty: true
+"""
+        }
     }
 
-    parameters {
-        string(
-            name: 'DB_HOST',
-            defaultValue: 'mysql',
-            description: 'Enter the database host address'
-        )
+    environment {
+        PROMETHEUS_NS = 'monitoring'
+        MYSQL_NS = 'database'
+        APP_NS = 'application'
     }
 
     stages {
-        stage('Verify Files') {
+        stage('Install Prometheus') {
             steps {
-                // Debug step to verify files are present
-                bat '''
-                    echo "Workspace contents:"
-                    dir
-                    echo "Requirements.txt contents:"
-                    type requirements.txt
-                '''
-            }
-        }
-
-        stage('Display DB Host') {
-            steps {
-                script {
-                    echo "Database host: ${params.DB_HOST}"
-                }
-            }
-        }
-
-        stage('Debug') {
-            steps {
-                bat 'echo %CD%'
-                bat 'dir'
-                bat 'git status'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    // Build the Docker image with DB_HOST as a build argument
-                    bat """
-                        echo "Building Docker image..."
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} --build-arg DB_HOST=${params.DB_HOST} .
+                container('helm-kubectl') {
+                    sh """
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo update
+                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                            --namespace ${PROMETHEUS_NS} \
+                            --create-namespace \
+                            --wait
                     """
                 }
             }
         }
 
-        stage('Login to DockerHub') {
+        stage('Install MySQL') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USERNAME')]) {
-                    bat 'docker login -u %DOCKERHUB_USERNAME% -p %DOCKERHUB_PASSWORD%'
+                container('helm-kubectl') {
+                    sh """
+                        # Create namespace if it doesn't exist
+                        kubectl create namespace ${MYSQL_NS} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Apply MySQL manifests
+                        kubectl apply -f kubernetes/mysql/deployment.yaml -n ${MYSQL_NS}
+                        kubectl apply -f kubernetes/mysql/service.yaml -n ${MYSQL_NS}
+                        
+                        # Wait for MySQL to be ready
+                        kubectl wait --for=condition=available deployment -l app=mysql -n ${MYSQL_NS} --timeout=300s
+                    """
                 }
             }
         }
 
-        stage('Push to DockerHub') {
+        stage('Install MySQL Exporter') {
             steps {
-                bat "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                container('helm-kubectl') {
+                    sh """
+                        # Install MySQL exporter using custom values
+                        helm upgrade --install mysql-exporter prometheus-community/prometheus-mysql-exporter \
+                            -f kubernetes/monitoring/mysql-exporter-values.yaml \
+                            --namespace ${MYSQL_NS} \
+                            --wait
+                    """
+                }
             }
         }
 
-        stage('Deploy with Docker Compose') {
+        stage('Install Flask App') {
             steps {
-                script {
-                    // Pass DB_HOST as an environment variable to Docker Compose
-                    bat """
-                        echo "Deploying with Docker Compose..."
-                        set DB_HOST=${params.DB_HOST}
-                        docker-compose up -d
+                container('helm-kubectl') {
+                    sh """
+                        # Create namespace if it doesn't exist
+                        kubectl create namespace ${APP_NS} --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Deploy Flask application
+                        kubectl apply -f kubernetes/flask/deployment.yaml -n ${APP_NS}
+                        kubectl apply -f kubernetes/flask/service.yaml -n ${APP_NS}
+                        
+                        # Wait for Flask app to be ready
+                        kubectl wait --for=condition=available deployment -l app=flask-app -n ${APP_NS} --timeout=300s
+                    """
+                }
+            }
+        }
+
+        stage('Configure Service Monitor') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        # Apply ServiceMonitor for Flask app
+                        kubectl apply -f kubernetes/monitoring/service-monitor.yaml -n ${APP_NS}
+                        
+                        # Verify ServiceMonitor is created
+                        kubectl get servicemonitor -n ${APP_NS}
                     """
                 }
             }
@@ -84,10 +106,11 @@ pipeline {
     }
 
     post {
-        always {
-            bat 'docker logout'
-            // Clean up images
-            bat "docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || exit 0"
+        success {
+            echo 'Successfully deployed all components!'
+        }
+        failure {
+            echo 'Pipeline failed! Please check the logs for details.'
         }
     }
 }
