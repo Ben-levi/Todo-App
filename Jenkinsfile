@@ -78,65 +78,134 @@ pipeline {
         }
         
         // Modified the Docker Compose deployment to include monitoring
-        stage('Deploy with Docker Compose') {
+        pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: jenkins-agent
+spec:
+  containers:
+  - name: helm-kubectl
+    image: dtzar/helm-kubectl:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: kubeconfig
+      mountPath: /root/.kube/
+  volumes:
+  - name: kubeconfig
+    secret:
+      secretName: kubeconfig
+"""
+        }
+    }
+
+    environment {
+        // Define versions and namespaces
+        PROMETHEUS_NS = 'monitoring'
+        MYSQL_NS = 'database'
+        APP_NS = 'application'
+    }
+
+    stages {
+        stage('Create Namespaces') {
             steps {
-                script {
-                    // Create monitoring docker-compose override file
-                    writeFile file: 'docker-compose.monitoring.yml', text: '''
-version: '3.8'
-services:
-  prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION}
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-
-  mysql-exporter:
-    image: prom/mysqld-exporter:${MYSQL_EXPORTER_VERSION}
-    environment:
-      - DATA_SOURCE_NAME=root:${MYSQL_ROOT_PASSWORD}@(${DB_HOST}:3306)/
-    ports:
-      - "9104:9104"
-
-  grafana:
-    image: grafana/grafana:${GRAFANA_VERSION}
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana-storage:/var/lib/grafana
-
-volumes:
-  grafana-storage:
-'''
-                    
-                    // Create Prometheus config
-                    writeFile file: 'prometheus.yml', text: '''
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: 'mysql'
-    static_configs:
-      - targets: ['mysql-exporter:9104']
-  - job_name: 'flask'
-    static_configs:
-      - targets: ['todo_app:5000']
-'''
-                    
-                    // Deploy everything
-                    bat """
-                        echo "Deploying with Docker Compose..."
-                        set DB_HOST=${params.DB_HOST}
-                        set MYSQL_ROOT_PASSWORD=${params.MYSQL_ROOT_PASSWORD}
-                        docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+                container('helm-kubectl') {
+                    sh """
+                        kubectl create namespace ${PROMETHEUS_NS} --dry-run=client -o yaml | kubectl apply -f -
+                        kubectl create namespace ${MYSQL_NS} --dry-run=client -o yaml | kubectl apply -f -
+                        kubectl create namespace ${APP_NS} --dry-run=client -o yaml | kubectl apply -f -
                     """
                 }
             }
         }
-        
+
+        stage('Install Prometheus') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo update
+                        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                            --namespace ${PROMETHEUS_NS} \
+                            --create-namespace \
+                            --wait
+                    """
+                }
+            }
+        }
+
+        stage('Deploy MySQL') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        kubectl apply -f kubernetes/mysql/deployment.yaml -n ${MYSQL_NS}
+                        kubectl apply -f kubernetes/mysql/service.yaml -n ${MYSQL_NS}
+                        kubectl wait --for=condition=available deployment -l app=mysql -n ${MYSQL_NS} --timeout=300s
+                    """
+                }
+            }
+        }
+
+        stage('Install MySQL Exporter') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo update
+                        helm upgrade --install mysql-exporter prometheus-community/prometheus-mysql-exporter \
+                            -f kubernetes/monitoring/mysql-exporter-values.yaml \
+                            --namespace ${MYSQL_NS} \
+                            --wait
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Flask App') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        kubectl apply -f kubernetes/flask/deployment.yaml -n ${APP_NS}
+                        kubectl apply -f kubernetes/flask/service.yaml -n ${APP_NS}
+                        kubectl wait --for=condition=available deployment -l app=flask-app -n ${APP_NS} --timeout=300s
+                    """
+                }
+            }
+        }
+
+        stage('Configure Monitoring') {
+            steps {
+                container('helm-kubectl') {
+                    sh """
+                        # Apply ServiceMonitor for Flask app
+                        kubectl apply -f kubernetes/monitoring/service-monitor.yaml -n ${APP_NS}
+                        
+                        # Verify ServiceMonitor is picked up
+                        kubectl get servicemonitor -n ${APP_NS}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline completed'
+        }
+        success {
+            echo 'Successfully deployed all components'
+        }
+        failure {
+            echo 'Pipeline failed'
+        }
+    }
+}
         // Added new stage to verify monitoring setup
         stage('Verify Monitoring') {
             steps {
